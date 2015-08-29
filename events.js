@@ -1,3 +1,5 @@
+var config = require("./config");
+
 //Find all places within a limit
 function get_formats() {
     formats = [];
@@ -9,7 +11,7 @@ function get_formats() {
     //return formats.join();
 }
 
-function ajax_request(tokenv, startv, endv, locationv) {
+function ajax_event_request(tokenv, startv, endv, locationv) {
     var search = {
         token: tokenv,
         categories: 111,
@@ -23,6 +25,15 @@ function ajax_request(tokenv, startv, endv, locationv) {
         cache: "false",
         data: $.param(search),
         //beforeSend: $('#load').show()
+    });
+}
+
+function ajax_venue_request(token, venue_id) {
+    return $.ajax({
+        url: "https://www.eventbrite.api.com/v3/venues/" + venue_id + "/?token=" + token,
+        type: "GET",
+        dataType: "json",
+        cache: "false"
     });
 }
 

@@ -2,7 +2,7 @@
 // // // Note: This example requires that you consent to location sharing when
 // // // prompted by your browser. If you see a blank space instead of the map, this
 // // // is probably because you have denied permission for location sharing.
-
+var config = require('./config');
 var map;
 var markers = [];
 var infowindows_content = [];
@@ -42,13 +42,12 @@ function initialize() {
             var location = $('#location-input').val().split(',').slice(0, 1).join('');
         }
 
-        var token = "ZBEVEGMUTNYPFPOKE4B7";
         var today = new Date();
         today = format(today);
         var end = format(thirty_days_later());
 
         //var params = {'hostname': $hostname, 'type': $type};
-        var res = ajax_request(token, today, end, location);
+        var res = ajax_event_request(token, today, end, location);
         res
             .done(function(data) {
                 //if data is non-empty, return an array containing data['events']['name']['text'], data['events']['description']['text'], data['events']['url'], data['events']['start']['local'], host name, event address, and number of people attending, latitude and longitude -.-"
@@ -63,14 +62,16 @@ function initialize() {
                     });
 
                     for (var i = 0; i < markers.length; i++) {
-                        markers[i].setMap(map);
-                        google.maps.event.addListener(markers[i], 'click', (function(marker, i) {
-                          return function() {
-                            infowindow.close()
-                            infowindow.setContent(infowindows_content[i]);
-                            infowindow.open(map, markers[i]);
-                          }
-                        })(markers[i], i));
+                        if (markers[i] !== null) {
+                            markers[i].setMap(map);
+                            google.maps.event.addListener(markers[i], 'click', (function(marker, i) {
+                                return function() {
+                                    infowindow.close()
+                                    infowindow.setContent(infowindows_content[i]);
+                                    infowindow.open(map, markers[i]);
+                                }
+                            })(markers[i], i));
+                        }
                     }
 
                     pan_to_city(map, $('#location-input').val());
@@ -85,7 +86,9 @@ function initialize() {
 
     function set_all_map(map) {
         for (var i = 0; i < markers.length; i++) {
-            markers[i].setMap(map);
+            if (markers[i] != null) {
+                markers[i].setMap(map);
+            }
         }
     }
 
@@ -94,49 +97,80 @@ function initialize() {
         markers = [];
     }
 
-    function add_marker(event) {
-        var latitude = parseFloat(event['venue']['latitude']),
-        longitude = parseFloat(event['venue']['longitude']),
-        coordinates = new google.maps.LatLng(latitude, longitude),
-        marker = new google.maps.Marker({
-            position: coordinates,
-            title: event['name']['text']
+    function ajax_venue_request(token, venue_id) {
+        return $.ajax({
+            url: "https://www.eventbrite.api.com/v3/venues/" + venue_id + "/?token=" + config.eventbrite_token,
+            type: "GET",
+            dataType: "json",
+            cache: "false"
         });
-        return marker;
+    }
+    
+    function add_marker(event) {
+        if (event['venue_id'] !== undefined) {
+            var res = ajax_venue_request(token, event['venue_id']);
+            res.done(function(venue) {
+                if (venue.latitude && venue.longitude) {
+                    var latitude = parseFloat(venue.latitude),
+                    longitude = parseFloat(venue.longitude),
+                    coordinates = new google.maps.LatLng(latitude, longitude),
+                    marker = new google.maps.Marker({
+                        position: coordinates,
+                        title: event['name']['text']
+                    });
+                    return marker;
+                } else {
+                    return null;
+                }
+            });
+        }
     }
 
     function add_infowindow_content(event) {
-        if (event['description'] !== null && event['description']['text'] !== null) {
-            var description = event['description']['text'];
-            if (event['description']['text'].split(' ').length > 100) {
-                description = description.split(' ').slice(0, 99).join(' ') + '...';
+        if (event != null && event['name'] !== undefined) {
+            if (event['description'] !== null && event['description']['text'] !== null) {
+                var description = event['description']['text'];
+                if (event['description']['text'].split(' ').length > 100) {
+                    description = description.split(' ').slice(0, 99).join(' ') + '...';
+                }
+            } else {
+                var description = "This event has no description!";
             }
-        } else {
-            var description = "This event has no description!";
+
+            var start_date = new Date(event['start']['local']),
+            end_date = new Date(event['end']['local']);
+
+            if (start_date.toDateString() === end_date.toDateString()) {
+                var date = "<p><b>Date & Time: </b>" + start_date.toDateString() + ', ' + 
+                start_date.toLocaleTimeString() + ' - ' + end_date.toLocaleTimeString() + '</p>';
+            } else {
+                var date = "<p><b>Start date: </b>" + start_date.toDateString() + ', ' +
+                start_date.toLocaleTimeString() + "</p>" +
+                "<p><b>End date: </b>" + end_date.toDateString() + ', ' + 
+                end_date.toLocaleTimeString() + "</p>";
+            }
+
+            var contentString = '<div class="info-content">';
+
+            if (event['name'] != undefined) {
+                contentString += '<h1 class="firstHeading">' + event['name']['text'] + '</h1>'
+            }
+
+            if (event['organizer'] != undefined) {
+                contentString += '<h2 class="secondHeading">' + event['organizer']['name'] + '</h2>' + date
+            }
+
+            contentString += '</div><div class="bodyContent"><p>' + description + '</p>'
+
+            if (event['url'] != undefined) {
+                contentString += '<p>For more information, please <a href="' + event['url'] + '">' + 
+                'click here</a>.</p>'
+            }
+
+            contentString += '</div>' + '</div>';
+
+            return contentString;
         }
-
-        var start_date = new Date(event['start']['local']),
-        end_date = new Date(event['end']['local']);
-
-        if (start_date.toDateString() === end_date.toDateString()) {
-            var date = "<p><b>Date & Time: </b>" + start_date.toDateString() + ', ' + 
-            start_date.toLocaleTimeString() + ' - ' + end_date.toLocaleTimeString() + '</p>';
-        } else {
-            var date = "<p><b>Start date: </b>" + start_date.toDateString() + ', ' +
-            start_date.toLocaleTimeString() + "</p>" +
-            "<p><b>End date: </b>" + end_date.toDateString() + ', ' + 
-            end_date.toLocaleTimeString() + "</p>";
-        }
-
-        return contentString = '<div class="info-content">'+
-            '<h1 class="firstHeading">' + event['name']['text'] + '</h1>'+
-            '<h2 class="secondHeading">' + event['organizer']['name'] + '</h2>' + 
-            date + '</div>' +
-            '<div class="bodyContent"><p>' + description + '</p>' +
-            '<p>For more information, please <a href="' + event['url'] + '">' + 
-            'click here</a>.</p>'+
-            '</div>'+
-            '</div>';
     }
 
     function notify_results(location, markers) {
